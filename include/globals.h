@@ -4,20 +4,18 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
-#include "photo_data.h" // WAJIB biar ikon kedetect
+#include "photo_data.h" 
 #include "esp_wifi.h"
 
-// --- SETTING LAYAR ---
 extern Adafruit_SSD1306 display;
 
-// --- PIN JOYSTICK ---
+// PIN JOYSTICK
 #define PIN_UP    42
 #define PIN_DOWN  41
 #define PIN_LEFT  40
 #define PIN_RIGHT 39
 #define PIN_OK    38
 
-// --- STRUKTUR DATA ---
 struct WiFiData {
   int id;
   String ssid;
@@ -42,9 +40,16 @@ extern int brightnessValue;
 extern WiFiData listWiFi[30];
 extern WiFiData targetTerkunci;
 extern int totalWiFi;
-extern int scannerState; // Tambahin ini karena di log error ada scannerState
+extern int scannerState;
 
-// --- PROTOTYPE FUNGSI (Biar RootX.cpp bisa panggil file lain) ---
+// --- VARIABEL SCANNER YANG TADI ERROR ---
+extern bool scanDone;
+extern bool triggerScan;
+extern bool sedang_scan;
+extern int cursorInScanner;
+extern int scrollPosScanner;
+
+// --- PROTOTYPE FUNGSI ---
 void handleJoystick();
 void tampilkanMenuLogo();
 void tampilkanMenuUtama();
