@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+#include <WiFi.h>
 #include "photo_data.h" 
 #include "esp_wifi.h"
 
@@ -41,6 +42,8 @@ extern WiFiData listWiFi[30];
 extern WiFiData targetTerkunci;
 extern int totalWiFi;
 extern int scannerState;
+extern bool spamUdahSetup;
+extern void sendBeacon(String ssid); // Daftarin biar wifi_system kenal
 
 // --- FIX ERROR BARU (DAFTARIN DI SINI) ---
 extern int targetLockedIdx;
