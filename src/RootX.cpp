@@ -20,67 +20,38 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define PIN_RIGHT 39
 #define PIN_OK    38
 
-// --- VARIABEL MENU GLOBAL (Biar semua file kenal) ---
-bool inSubMenu = false;    // Status: lagi di Logo (false) atau di List (true)
-int currentMenu = 0;       // Pilih kategori logo (0-3)
-int currentSub = 0;        // Pilih baris menu di dalem list
-int topMenu = 0;           // Buat scrolling list menu
 
-// Struktur data WiFi biar bisa dibaca di semua file
-struct WiFiData {
-  int id;
-  String ssid;
-  int rssi;
-  int channel;
-  String encrypt;
-  String mac;
-};
-
-
-
-
-
-// Variabel Global Scanner
-WiFiData listWiFi[30];
-
-
-int brightnessValue = 150; // Default (0-255)
-
-int spamState = 0; 
+// RUMAH ASLI (Satu kali saja, jangan duplikat!)
+Adafruit_SSD1306 display(128, 64, &Wire, -1);
+int appMode = 0;
+bool inSubMenu = false;
+int currentMenu = 0;
+int currentSub = 0;
+int topMenu = 0;
+bool isDeauthing = false;
+bool deauthUdahSetup = false;
 bool isSpamming = false;
 int aktifModeSpam = 0;
+int spamState = 0;
+int brightnessValue = 150;
+int totalWiFi = 0;
+int scannerState = 0;
+WiFiData listWiFi[30];
+WiFiData targetTerkunci;
 
-bool spamUdahSetup = false;
-bool deauthUdahSetup = false;
-
+// VARIABEL BARU
+int targetLockedIdx = -1;
+bool adaTarget = false;
+int contextCursor = 0;
+int deauthState = 0;
 bool scanDone = false;
 bool triggerScan = false;
 bool sedang_scan = false;
 int cursorInScanner = 0;
 int scrollPosScanner = 0;
-// --- Variabel State WiFi Scanner ---
-int scannerState = 0; 
-unsigned long popUpTimer = 0; 
-bool triggerScan = false; 
-bool scanDone = false;    
-int totalWiFi = 0;
-int cursorInScanner = 0; 
-int scrollPosScanner = 0;
-int targetLockedIdx = -1;
-int contextCursor = 0;
 
-// --- BRANKAS TARGET ---
-WiFiData targetTerkunci; 
-bool adaTarget = false;  
+// ... sisanya setup() & loop()
 
-// --- DEAUTH VAR ----
-int deauthState = 0;
-bool isDeauthing = false;
-
-// ----------------------
-
-bool sedang_scan = false;
-int appMode = 0;
 
 TaskHandle_t TaskWiFi; // Handle untuk Core 0
 
