@@ -21,8 +21,6 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 #define PIN_OK    38
 
 
-// RUMAH ASLI (Satu kali saja, jangan duplikat!)
-Adafruit_SSD1306 display(128, 64, &Wire, -1);
 int appMode = 0;
 bool inSubMenu = false;
 int currentMenu = 0;
@@ -31,6 +29,7 @@ int topMenu = 0;
 bool isDeauthing = false;
 bool deauthUdahSetup = false;
 bool isSpamming = false;
+bool spamUdahSetup = false;    // <--- TAMBAHIN INI (Tadi error)
 int aktifModeSpam = 0;
 int spamState = 0;
 int brightnessValue = 150;
@@ -39,7 +38,6 @@ int scannerState = 0;
 WiFiData listWiFi[30];
 WiFiData targetTerkunci;
 
-// VARIABEL BARU
 int targetLockedIdx = -1;
 bool adaTarget = false;
 int contextCursor = 0;
@@ -49,6 +47,9 @@ bool triggerScan = false;
 bool sedang_scan = false;
 int cursorInScanner = 0;
 int scrollPosScanner = 0;
+
+// ... sisanya setup() dan loop()
+
 
 // ... sisanya setup() & loop()
 
