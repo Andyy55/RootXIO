@@ -42,18 +42,25 @@ extern WiFiData targetTerkunci;
 extern int totalWiFi;
 extern int scannerState;
 
-// --- VARIABEL SCANNER YANG TADI ERROR ---
+// --- FIX ERROR BARU (DAFTARIN DI SINI) ---
+extern int targetLockedIdx;
+extern bool adaTarget;
+extern int contextCursor;
+extern int deauthState;
 extern bool scanDone;
 extern bool triggerScan;
 extern bool sedang_scan;
 extern int cursorInScanner;
 extern int scrollPosScanner;
 
-// --- PROTOTYPE FUNGSI ---
+// --- PROTOTYPE FUNGSI (Lengkapin biar gak error 'not declared') ---
 void handleJoystick();
 void tampilkanMenuLogo();
 void tampilkanMenuUtama();
 void tampilkanWifiScanner();
+void tampilkanDeauthScreen();    // Baru
+void tampilkanBrightness();      // Baru
+void tampilkanSpamScreen(String judul, String subTeks); // Baru
 void loopWiFi(void * pvParameters);
 void tampilkanLogoDulu();
 void tampilkanIntroAnime();
