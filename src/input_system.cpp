@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <globals.h>
 
 void handleJoystick() {
   static unsigned long lastPress = 0;

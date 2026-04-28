@@ -1,4 +1,6 @@
 #include <Arduino.h>
+#include <globals.h>
+
 
 // 1. Fungsi Tampilan Logo Saja
 void tampilkanLogoDulu() {

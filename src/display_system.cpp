@@ -1,5 +1,5 @@
 #include <Arduino.h>
-
+#include <globals.h>
 
 const unsigned char* iconListWiFi[] = {
   iconSmall_scan,    
