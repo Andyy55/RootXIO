@@ -1,6 +1,7 @@
 #include <Arduino.h>
 #include <globals.h>
-
+#include "esp_wifi.h"
+#include "esp_private/wifi.h" // RAHASIA: Masuk ke dapur driver
 
 
 
@@ -49,17 +50,7 @@ const char* rickRollLyrics[] = {
 uint8_t deauthFrame[26] = { 0xc0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 uint8_t disasFrame[26]  = { 0xa0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00 };
 
-#include <Arduino.h>
-#include "globals.h" // Pake kutip buat local header
-#include "esp_wifi.h"
-#include "esp_private/wifi.h" // RAHASIA: Masuk ke dapur driver
 
-void stringToMac(String macStr, uint8_t *macAddr) {
-  int values[6];
-  if (6 == sscanf(macStr.c_str(), "%x:%x:%x:%x:%x:%x", &values[0], &values[1], &values[2], &values[3], &values[4], &values[5])) {
-    for (int i = 0; i < 6; ++i) macAddr[i] = (uint8_t)values[i];
-  }
-}
 
 // ... (beaconPacket, fakeSSIDs, rickRollLyrics, deauthFrame lu tetep sama) ...
 
