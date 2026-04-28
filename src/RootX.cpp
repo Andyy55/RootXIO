@@ -53,7 +53,11 @@ int aktifModeSpam = 0;
 bool spamUdahSetup = false;
 bool deauthUdahSetup = false;
 
-
+bool scanDone = false;
+bool triggerScan = false;
+bool sedang_scan = false;
+int cursorInScanner = 0;
+int scrollPosScanner = 0;
 // --- Variabel State WiFi Scanner ---
 int scannerState = 0; 
 unsigned long popUpTimer = 0; 
