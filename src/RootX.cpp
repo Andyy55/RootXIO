@@ -122,3 +122,12 @@ void loop() {
     else if (aktifModeSpam == 2) tampilkanSpamScreen("RICKROLL", "Start Spam?");
   }
 }
+
+extern "C" void app_main() {
+    initArduino();      // Inisialisasi mesin Arduino
+    setup();            // Panggil setup lu
+    for(;;) {
+        loop();         // Jalankan loop lu selamanya
+        vTaskDelay(1);  // Kasih nafas dikit biar watchdog gak teriak
+    }
+}
