@@ -80,6 +80,8 @@ void loopWiFi(void * pvParameters) {
         esp_wifi_set_promiscuous(true);
         esp_wifi_set_ps(WIFI_PS_NONE); // MATIIN POWER SAVE
         spamUdahSetup = true;
+        esp_wifi_start(); 
+        vTaskDelay(100 / portTICK_PERIOD_MS);
       }
       if (aktifModeSpam == 1) {
         int randomIdx = esp_random() % 8; 
@@ -123,6 +125,8 @@ void loopWiFi(void * pvParameters) {
         wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
         esp_wifi_init(&cfg);
         esp_wifi_set_mode(WIFI_MODE_STA);
+        esp_wifi_start(); // NYALAIN RADIONYA! Tanpa ini, interface statusnya INVALID
+        vTaskDelay(100 / portTICK_PERIOD_MS);
         
         wifi_promiscuous_filter_t filter = { .filter_mask = WIFI_PROMIS_FILTER_MASK_ALL };
         esp_wifi_set_promiscuous_filter(&filter);
